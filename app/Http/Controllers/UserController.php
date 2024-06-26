@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\MessageSent;
 use App\Models\ChatMessage;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -56,9 +57,9 @@ class UserController extends Controller
 
     public function sendMessage()
     {
-        $data = request()->all();
-        $data['sender_id'] = auth()->id();
-        ChatMessage::create($data);
+        $message = request()->all();
+        $message['sender_id'] = auth()->id();
+        broadcast(new MessageSent(ChatMessage::create($message)));
         return response()->json(['status' => 'success']);
     }
 

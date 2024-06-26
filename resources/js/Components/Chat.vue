@@ -4,7 +4,7 @@
       <span class="pl-2 font-bold">{{ chatPerson.name }}</span>
     </div>
     <div class="flex flex-col h-full overflow-hidden bg-white rounded-lg shadow-lg">
-      <div class="flex-1 p-4 overflow-y-auto bg-gray-50">
+      <div ref="messageContainer" class="flex-1 p-4 overflow-y-auto bg-gray-50">
         <!-- Dynamic messages will be displayed here -->
         <div v-for="(message, index) in filteredMessages" :key="index" class="mb-4">
           <!-- Chat Person's Message -->
@@ -39,18 +39,23 @@
                  type="text"
                  class="flex-1 p-2 text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                  placeholder="Type a message..."
-                 @keyup.enter="sendMessage">
+                 @keyup.enter="sendMessage"
+                 @keydown="sendTypingEvent"
+                 >
           <Button label="Send"
                   icon="pi pi-send"
                   class="p-2 ml-2"
                   @click="sendMessage" />
         </div>
+        <small v-if="isFriendTyping" class="text-gray-700">
+            {{ chatPerson.name }} is typing...
+        </small>
       </div>
     </div>
   </template>
 
   <script setup>
-  import { ref, onMounted, inject, computed } from 'vue';
+  import { ref, onMounted, inject, computed, watch, nextTick } from 'vue';
   import Button from 'primevue/button';
   import axios from 'axios';
 
@@ -59,6 +64,9 @@
   const authUser = ref({});
   const messages = ref([]);
   const newMessage = ref('');
+  const messageContainer = ref(null);
+  const isFriendTyping = ref(false);
+  const isFriendTypingTimer = ref(null);
 
   const sendMessage = async () => {
     try {
@@ -75,6 +83,22 @@
       console.error("Error sending message: ", error);
     }
   };
+
+
+watch(messages, () => {
+
+            nextTick(() => {
+                messageContainer.value.scrollTop({
+                top: messageContainer.value.scrollHeight,
+                behavior:'smooth'
+             })
+            })
+
+    }, { deep: true});
+
+
+
+
 
   const fetchData = async () => {
     try {
@@ -103,8 +127,33 @@
     }
   };
 
+   //send typing event
+   const sendTypingEvent =  () => {
+       Echo.private(`chat.${chatPerson.value.id}`)
+        .whisper('typing', {
+            name: authUser.value.name
+        });
+    };
+
   // Fetch initial data on component mount
-  onMounted(fetchData);
+  onMounted(() => {
+    fetchData();
+    Echo.private(`chat.${authUser.value.id}`)
+      .listen('MessageSent', (e) => {
+        messages.value.push(e.message);
+      })
+      .listenForWhisper('typing', (e) => {
+        isFriendTyping.value = e.name === chatPerson.value.name;
+
+        if (isFriendTypingTimer.value) {
+            clearTimeout(isFriendTypingTimer.value);
+        }
+        isFriendTypingTimer.value = setTimeout(() => {
+                    isFriendTyping.value = false;
+                }, 3000);
+            });
+        });
+
 
   // Computed property to filter and sort messages
   const filteredMessages = computed(() => {
